@@ -42,6 +42,12 @@ struct Span {
 enum TokenKind {
     LeftParen,
     RightParen,
+    Plus,
+    Minus,
+    Slash,
+    Asterisk,
+
+    Number,
 }
 
 #[derive(Debug)]
@@ -69,11 +75,15 @@ impl<'source> Lexer<'source> {
         }
     }
 
+    fn peek(&mut self) -> Option<&char> {
+        self.chars.peek()
+    }
+
     fn advance(&mut self) -> Option<char> {
         self.chars.next()
     }
 
-    fn move_span(&mut self, c: char) {
+    fn extend_span(&mut self, c: char) {
         if c == '\n' {
             self.span.end.line += 1;
             self.span.end.col = 1;
@@ -83,21 +93,49 @@ impl<'source> Lexer<'source> {
         self.span.end.byte_offset += c.len_utf8();
     }
 
-    fn reset_span(&mut self) {
+    fn close_span(&mut self) {
         self.span.start = self.span.end;
     }
 
-    fn single_char_token(&mut self, c: char, kind: TokenKind) -> Token<'source> {
+    fn move_span(&mut self, c: char) {
+        self.extend_span(c);
+        self.close_span();
+    }
+
+    fn get_lexeme(&mut self) -> &'source str {
+        &self.source[self.span.start.byte_offset..=self.span.end.byte_offset]
+    }
+
+    fn single_char(&mut self, c: char, kind: TokenKind) -> Result<Token<'source>> {
         let token = Token {
             kind,
-            lexeme: &self.source[self.span.start.byte_offset..=self.span.end.byte_offset],
+            lexeme: self.get_lexeme(),
             span: self.span,
         };
 
         self.move_span(c);
-        self.reset_span();
 
-        token
+        Ok(token)
+    }
+
+    fn number(&mut self, c: char) -> Result<Token<'source>> {
+        let mut previous = c;
+        while matches!(self.peek(), Some(c) if c.is_digit(10)) {
+            self.extend_span(previous);
+            if let Some(c) = self.advance() {
+                previous = c;
+            }
+        }
+
+        let token = Token {
+            kind: TokenKind::Number,
+            lexeme: self.get_lexeme(),
+            span: self.span,
+        };
+
+        self.move_span(previous);
+
+        Ok(token)
     }
 
     fn unexpected_char(&mut self, c: char) -> Result<Token<'source>> {
@@ -108,7 +146,7 @@ impl<'source> Lexer<'source> {
 
         self.move_span(c);
 
-        return Err(error);
+        Err(error)
     }
 }
 
@@ -118,11 +156,22 @@ impl<'source> Iterator for Lexer<'source> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(c) = self.advance() {
-                match c {
-                    '(' => return Some(Ok(self.single_char_token(c, TokenKind::LeftParen))),
-                    ')' => return Some(Ok(self.single_char_token(c, TokenKind::RightParen))),
-                    _ => return Some(self.unexpected_char(c)),
-                }
+                let res = match c {
+                    '(' => self.single_char(c, TokenKind::LeftParen),
+                    ')' => self.single_char(c, TokenKind::RightParen),
+                    '+' => self.single_char(c, TokenKind::Plus),
+                    '-' => self.single_char(c, TokenKind::Minus),
+                    '*' => self.single_char(c, TokenKind::Asterisk),
+                    '/' => self.single_char(c, TokenKind::Slash),
+                    c if c.is_digit(10) => self.number(c),
+                    c if c.is_whitespace() => {
+                        self.move_span(c);
+                        continue;
+                    }
+                    _ => self.unexpected_char(c),
+                };
+
+                return Some(res);
             } else {
                 return None;
             }
@@ -141,7 +190,7 @@ impl<'source> Tokens<'source> for &'source str {
 }
 
 fn main() {
-    for token in "Hello, Wit!".tokens() {
-        println!("{token:?}");
+    for token in "12 + 34\n5 + 6\n78 + 90\n".tokens() {
+        println!("{token:#?}");
     }
 }
