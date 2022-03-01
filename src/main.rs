@@ -1,10 +1,16 @@
 use itertools::{peek_nth, PeekNth};
 use std::{fmt, str::Chars};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Debug, thiserror::Error)]
 enum Error {
     #[error("unexpected char '{character}' at {location}")]
     UnexpectedChar { character: char, location: Loc },
+
+    #[error("unexpected EOF")]
+    UnexpectedEof,
+
+    #[error("unexpected token of kind '{kind}' at {location}")]
+    UnexpectedToken { kind: TokenKind, location: Loc },
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -38,7 +44,7 @@ struct Span {
     end: Loc,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 enum TokenKind {
     LeftParen,
     RightParen,
@@ -50,7 +56,13 @@ enum TokenKind {
     Number,
 }
 
-#[derive(Debug)]
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Clone, Debug)]
 struct Token<'source> {
     kind: TokenKind,
     lexeme: &'source str,
@@ -201,8 +213,100 @@ impl<'source> Tokens<'source> for &'source str {
     }
 }
 
-fn main() {
-    for token in "1.2 + 34\n5 + 6\n78. + 90\n".tokens() {
-        println!("{token:#?}");
+#[derive(Debug)]
+enum Expr<'source> {
+    Number(Token<'source>),
+    BinOp {
+        left: Box<Expr<'source>>,
+        op: Token<'source>,
+        right: Box<Expr<'source>>,
+    },
+    Group(Box<Expr<'source>>),
+}
+
+struct Parser<'source> {
+    tokens: PeekNth<Lexer<'source>>,
+}
+
+impl<'source> Parser<'source> {
+    fn new(source: &'source str) -> Self {
+        Self {
+            tokens: peek_nth(source.tokens()),
+        }
     }
+
+    fn parse_number(&mut self, token: Token<'source>) -> Result<Expr<'source>> {
+        Ok(Expr::Number(token))
+    }
+
+    fn get_prefix_parselet(
+        &self,
+        kind: TokenKind,
+    ) -> Option<fn(&mut Self, token: Token<'source>) -> Result<Expr<'source>>> {
+        match kind {
+            TokenKind::Number => Some(Self::parse_number),
+            _ => None,
+        }
+    }
+
+    fn parse_add(&mut self, left: Expr<'source>, token: Token<'source>) -> Result<Expr<'source>> {
+        let right = Box::new(self.parse()?);
+
+        Ok(Expr::BinOp {
+            left: Box::new(left),
+            op: token,
+            right,
+        })
+    }
+
+    fn get_infix_parselet(
+        &self,
+        kind: TokenKind,
+    ) -> Option<fn(&mut Self, left: Expr<'source>, token: Token<'source>) -> Result<Expr<'source>>>
+    {
+        match kind {
+            TokenKind::Plus => Some(Self::parse_add),
+            _ => None,
+        }
+    }
+
+    fn parse(&mut self) -> Result<Expr<'source>> {
+        let token = self.tokens.next().ok_or(Error::UnexpectedEof)??;
+
+        let parse_prefix =
+            self.get_prefix_parselet(token.kind)
+                .ok_or_else(|| Error::UnexpectedToken {
+                    kind: token.kind,
+                    location: token.span.start,
+                })?;
+
+        let left = parse_prefix(self, token)?;
+
+        let token = {
+            match self.tokens.peek() {
+                Some(res) => match res {
+                    Ok(token) => token.clone(),
+                    Err(error) => return Err(error.clone()),
+                },
+                None => return Ok(left),
+            }
+        };
+
+        let parse_infix = match self.get_infix_parselet(token.kind) {
+            Some(parselet) => parselet,
+            None => return Ok(left),
+        };
+
+        let token = self.tokens.next().ok_or(Error::UnexpectedEof)??;
+
+        parse_infix(self, left, token)
+    }
+}
+
+fn main() -> anyhow::Result<()> {
+    let source = "1.2 + 34";
+    let expr = Parser::new(source).parse()?;
+    println!("{expr:#?}");
+
+    Ok(())
 }
