@@ -154,28 +154,26 @@ impl<'source> Iterator for Lexer<'source> {
     type Item = Result<Token<'source>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(c) = self.advance() {
-                let res = match c {
-                    '(' => self.single_char(c, TokenKind::LeftParen),
-                    ')' => self.single_char(c, TokenKind::RightParen),
-                    '+' => self.single_char(c, TokenKind::Plus),
-                    '-' => self.single_char(c, TokenKind::Minus),
-                    '*' => self.single_char(c, TokenKind::Asterisk),
-                    '/' => self.single_char(c, TokenKind::Slash),
-                    c if c.is_digit(10) => self.number(c),
-                    c if c.is_whitespace() => {
-                        self.move_span(c);
-                        continue;
-                    }
-                    _ => self.unexpected_char(c),
-                };
+        while let Some(c) = self.advance() {
+            let res = match c {
+                '(' => self.single_char(c, TokenKind::LeftParen),
+                ')' => self.single_char(c, TokenKind::RightParen),
+                '+' => self.single_char(c, TokenKind::Plus),
+                '-' => self.single_char(c, TokenKind::Minus),
+                '*' => self.single_char(c, TokenKind::Asterisk),
+                '/' => self.single_char(c, TokenKind::Slash),
+                c if c.is_digit(10) => self.number(c),
+                c if c.is_whitespace() => {
+                    self.move_span(c);
+                    continue;
+                }
+                _ => self.unexpected_char(c),
+            };
 
-                return Some(res);
-            } else {
-                return None;
-            }
+            return Some(res);
         }
+
+        None
     }
 }
 
