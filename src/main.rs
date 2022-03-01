@@ -127,6 +127,20 @@ impl<'source> Lexer<'source> {
             }
         }
 
+        if matches!(self.peek(), Some(c) if *c == '.') {
+            self.extend_span(previous);
+            if let Some(c) = self.advance() {
+                previous = c;
+            }
+
+            while matches!(self.peek(), Some(c) if c.is_digit(10)) {
+                self.extend_span(previous);
+                if let Some(c) = self.advance() {
+                    previous = c;
+                }
+            }
+        }
+
         let token = Token {
             kind: TokenKind::Number,
             lexeme: self.get_lexeme(),
@@ -188,7 +202,7 @@ impl<'source> Tokens<'source> for &'source str {
 }
 
 fn main() {
-    for token in "12 + 34\n5 + 6\n78 + 90\n".tokens() {
+    for token in "1.2 + 34\n5 + 6\n78. + 90\n".tokens() {
         println!("{token:#?}");
     }
 }
