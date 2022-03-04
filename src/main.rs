@@ -3,6 +3,9 @@ use std::{fmt, str::Chars};
 
 #[derive(Clone, Debug, thiserror::Error)]
 enum Error {
+    #[error("expected token of kind '{kind}'")]
+    ExpectedSpecificToken { kind: TokenKind },
+
     #[error("unexpected char '{character}' at {location}")]
     UnexpectedChar { character: char, location: Loc },
 
@@ -239,12 +242,30 @@ impl<'source> Parser<'source> {
         Ok(Expr::Number(token))
     }
 
+    fn parse_group(&mut self, token: Token<'source>) -> Result<Expr<'source>> {
+        let expr = Box::new(self.parse()?);
+        if !matches!(
+            self.tokens.next(),
+            Some(Ok(Token {
+                kind: TokenKind::RightParen,
+                ..
+            }))
+        ) {
+            return Err(Error::ExpectedSpecificToken {
+                kind: TokenKind::RightParen,
+            });
+        }
+
+        Ok(Expr::Group(expr))
+    }
+
     fn get_prefix_parselet(
         &self,
         kind: TokenKind,
     ) -> Option<fn(&mut Self, token: Token<'source>) -> Result<Expr<'source>>> {
         match kind {
             TokenKind::Number => Some(Self::parse_number),
+            TokenKind::LeftParen => Some(Self::parse_group),
             _ => None,
         }
     }
@@ -304,7 +325,7 @@ impl<'source> Parser<'source> {
 }
 
 fn main() -> anyhow::Result<()> {
-    let source = "1.2 + 34";
+    let source = "1.2 + 34 + (5 + 6.7)";
     let expr = Parser::new(source).parse()?;
     println!("{expr:#?}");
 
