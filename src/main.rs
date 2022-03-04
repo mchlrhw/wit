@@ -287,7 +287,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse_add(&mut self, left: Expr<'source>, token: Token<'source>) -> Result<Expr<'source>> {
+    fn parse_binop(&mut self, left: Expr<'source>, token: Token<'source>) -> Result<Expr<'source>> {
         let right = Box::new(self.parse()?);
 
         Ok(Expr::BinOp {
@@ -303,7 +303,10 @@ impl<'source> Parser<'source> {
     ) -> Option<fn(&mut Self, left: Expr<'source>, token: Token<'source>) -> Result<Expr<'source>>>
     {
         match kind {
-            TokenKind::Plus => Some(Self::parse_add),
+            TokenKind::Plus => Some(Self::parse_binop),
+            TokenKind::Minus => Some(Self::parse_binop),
+            TokenKind::Slash => Some(Self::parse_binop),
+            TokenKind::Asterisk => Some(Self::parse_binop),
             _ => None,
         }
     }
@@ -342,7 +345,7 @@ impl<'source> Parser<'source> {
 }
 
 fn main() -> anyhow::Result<()> {
-    let source = "1.2 + 34 + (5 + 6.7";
+    let source = "1.2 + 34 - (5 / 6.7 * 89)";
     let expr = Parser::new(source).parse()?;
     println!("{expr:#?}");
 
