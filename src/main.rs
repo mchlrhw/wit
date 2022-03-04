@@ -3,8 +3,8 @@ use std::{fmt, str::Chars};
 
 #[derive(Clone, Debug, thiserror::Error)]
 enum Error {
-    #[error("expected token of kind '{kind}'")]
-    ExpectedSpecificToken { kind: TokenKind },
+    #[error("unclosed group at {location}")]
+    UnclosedGroup { location: Loc },
 
     #[error("unexpected char '{character}' at {location}")]
     UnexpectedChar { character: char, location: Loc },
@@ -227,6 +227,23 @@ enum Expr<'source> {
     Group(Box<Expr<'source>>),
 }
 
+impl<'source> Expr<'source> {
+    fn span(&self) -> Span {
+        use Expr::*;
+
+        match self {
+            Number(token) => token.span,
+            BinOp { left, right, .. } => {
+                let start = left.span().start;
+                let end = right.span().end;
+
+                Span { start, end }
+            }
+            Group(expr) => expr.span(),
+        }
+    }
+}
+
 struct Parser<'source> {
     tokens: PeekNth<Lexer<'source>>,
 }
@@ -242,7 +259,7 @@ impl<'source> Parser<'source> {
         Ok(Expr::Number(token))
     }
 
-    fn parse_group(&mut self, token: Token<'source>) -> Result<Expr<'source>> {
+    fn parse_group(&mut self, _token: Token<'source>) -> Result<Expr<'source>> {
         let expr = Box::new(self.parse()?);
         if !matches!(
             self.tokens.next(),
@@ -251,8 +268,8 @@ impl<'source> Parser<'source> {
                 ..
             }))
         ) {
-            return Err(Error::ExpectedSpecificToken {
-                kind: TokenKind::RightParen,
+            return Err(Error::UnclosedGroup {
+                location: expr.span().end,
             });
         }
 
@@ -325,7 +342,7 @@ impl<'source> Parser<'source> {
 }
 
 fn main() -> anyhow::Result<()> {
-    let source = "1.2 + 34 + (5 + 6.7)";
+    let source = "1.2 + 34 + (5 + 6.7";
     let expr = Parser::new(source).parse()?;
     println!("{expr:#?}");
 
