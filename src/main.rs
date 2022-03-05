@@ -59,6 +59,19 @@ enum TokenKind {
     Number,
 }
 
+impl TokenKind {
+    fn get_precedence(&self) -> Precedence {
+        use TokenKind::*;
+
+        match self {
+            Plus | Minus => Precedence::Sum,
+            Slash | Asterisk => Precedence::Product,
+            LeftParen | Number => Precedence::Prefix,
+            _ => Precedence::Lowest,
+        }
+    }
+}
+
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -244,6 +257,14 @@ impl<'source> Expr<'source> {
     }
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Precedence {
+    Lowest,
+    Sum,
+    Product,
+    Prefix,
+}
+
 struct Parser<'source> {
     tokens: PeekNth<Lexer<'source>>,
 }
@@ -259,8 +280,8 @@ impl<'source> Parser<'source> {
         Ok(Expr::Number(token))
     }
 
-    fn parse_group(&mut self, _token: Token<'source>) -> Result<Expr<'source>> {
-        let expr = Box::new(self.parse()?);
+    fn parse_group(&mut self, token: Token<'source>) -> Result<Expr<'source>> {
+        let expr = Box::new(self.parse_with_precedence(token.kind.get_precedence())?);
         if !matches!(
             self.tokens.next(),
             Some(Ok(Token {
@@ -288,7 +309,7 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_binop(&mut self, left: Expr<'source>, token: Token<'source>) -> Result<Expr<'source>> {
-        let right = Box::new(self.parse()?);
+        let right = Box::new(self.parse_with_precedence(token.kind.get_precedence())?);
 
         Ok(Expr::BinOp {
             left: Box::new(left),
@@ -311,7 +332,15 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse(&mut self) -> Result<Expr<'source>> {
+    fn get_next_precedence(&mut self) -> Precedence {
+        if let Some(Ok(token)) = self.tokens.peek() {
+            token.kind.get_precedence()
+        } else {
+            Precedence::Lowest
+        }
+    }
+
+    fn parse_with_precedence(&mut self, precedence: Precedence) -> Result<Expr<'source>> {
         let token = self.tokens.next().ok_or(Error::UnexpectedEof)??;
 
         let parse_prefix =
@@ -321,31 +350,29 @@ impl<'source> Parser<'source> {
                     location: token.span.start,
                 })?;
 
-        let left = parse_prefix(self, token)?;
+        let mut left = parse_prefix(self, token)?;
 
-        let token = {
-            match self.tokens.peek() {
-                Some(res) => match res {
-                    Ok(token) => token.clone(),
-                    Err(error) => return Err(error.clone()),
-                },
+        while precedence < self.get_next_precedence() {
+            let token = self.tokens.next().ok_or(Error::UnexpectedEof)??;
+
+            let parse_infix = match self.get_infix_parselet(token.kind) {
+                Some(parselet) => parselet,
                 None => return Ok(left),
-            }
-        };
+            };
 
-        let parse_infix = match self.get_infix_parselet(token.kind) {
-            Some(parselet) => parselet,
-            None => return Ok(left),
-        };
+            left = parse_infix(self, left, token)?;
+        }
 
-        let token = self.tokens.next().ok_or(Error::UnexpectedEof)??;
+        Ok(left)
+    }
 
-        parse_infix(self, left, token)
+    fn parse(&mut self) -> Result<Expr<'source>> {
+        self.parse_with_precedence(Precedence::Lowest)
     }
 }
 
 fn main() -> anyhow::Result<()> {
-    let source = "1.2 + 34 - (5 / 6.7 * 89)";
+    let source = "1.2 - 34 * 5 - 6.7 / 89";
     let expr = Parser::new(source).parse()?;
     println!("{expr:#?}");
 
