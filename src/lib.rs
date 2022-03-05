@@ -76,27 +76,6 @@ pub struct Token<'source> {
     span: Span,
 }
 
-impl<'source> Token<'source> {
-    fn prefix_parselet(&self) -> Option<Box<dyn PrefixParselet<'source>>> {
-        use TokenKind::*;
-
-        match self.kind {
-            Number => Some(Box::new(NumberParselet)),
-            LeftParen => Some(Box::new(GroupParselet)),
-            _ => None,
-        }
-    }
-
-    fn infix_parselet(&self) -> Option<Box<dyn InfixParselet<'source>>> {
-        match self.kind {
-            TokenKind::Plus | TokenKind::Minus | TokenKind::Slash | TokenKind::Asterisk => {
-                Some(Box::new(BinOpParselet { kind: self.kind }))
-            }
-            _ => None,
-        }
-    }
-}
-
 struct Lexer<'source> {
     source: &'source str,
     chars: PeekNth<Chars<'source>>,
@@ -266,87 +245,5 @@ impl<'source> Expr<'source> {
             }
             Group(expr) => expr.span(),
         }
-    }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-enum Precedence {
-    Lowest,
-    Sum,
-    Product,
-}
-
-trait PrefixParselet<'source> {
-    fn parse(&self, parser: &mut Parser<'source>, token: Token<'source>) -> Result<Expr<'source>>;
-}
-
-trait InfixParselet<'source> {
-    fn precedence(&self) -> Precedence;
-
-    fn parse(
-        &self,
-        parser: &mut Parser<'source>,
-        left: Expr<'source>,
-        token: Token<'source>,
-    ) -> Result<Expr<'source>>;
-}
-
-struct NumberParselet;
-
-impl<'source> PrefixParselet<'source> for NumberParselet {
-    fn parse(&self, _parser: &mut Parser<'source>, token: Token<'source>) -> Result<Expr<'source>> {
-        Ok(Expr::Number(token))
-    }
-}
-
-struct GroupParselet;
-
-impl<'source> PrefixParselet<'source> for GroupParselet {
-    fn parse(&self, parser: &mut Parser<'source>, _token: Token<'source>) -> Result<Expr<'source>> {
-        let expr = Box::new(parser.parse()?);
-        if !matches!(
-            parser.tokens.next(),
-            Some(Ok(Token {
-                kind: TokenKind::RightParen,
-                ..
-            }))
-        ) {
-            return Err(Error::UnclosedGroup {
-                location: expr.span().end,
-            });
-        }
-
-        Ok(Expr::Group(expr))
-    }
-}
-
-struct BinOpParselet {
-    kind: TokenKind,
-}
-
-impl<'source> InfixParselet<'source> for BinOpParselet {
-    fn precedence(&self) -> Precedence {
-        use TokenKind::*;
-
-        match self.kind {
-            Plus | Minus => Precedence::Sum,
-            Slash | Asterisk => Precedence::Product,
-            _ => unimplemented!(),
-        }
-    }
-
-    fn parse(
-        &self,
-        parser: &mut Parser<'source>,
-        left: Expr<'source>,
-        token: Token<'source>,
-    ) -> Result<Expr<'source>> {
-        let right = Box::new(parser.parse_with_precedence(self.precedence())?);
-
-        Ok(Expr::BinOp {
-            left: Box::new(left),
-            op: token,
-            right,
-        })
     }
 }
