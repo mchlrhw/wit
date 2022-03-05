@@ -1,6 +1,9 @@
-use crate::{Error, Result, Span, Token, TokenKind};
+pub mod token;
+
+use crate::{Error, Result, Span};
 use itertools::{peek_nth, PeekNth};
 use std::str::Chars;
+use token::{Token, TokenKind};
 
 pub struct Lexer<'source> {
     source: &'source str,

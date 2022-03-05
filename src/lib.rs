@@ -3,6 +3,7 @@ mod parser;
 
 use std::fmt;
 
+use lexer::token::{Token, TokenKind};
 pub use parser::Parser;
 
 #[derive(Clone, Debug, thiserror::Error)]
@@ -46,34 +47,9 @@ impl fmt::Display for Loc {
 }
 
 #[derive(Copy, Clone, Default, Debug)]
-struct Span {
+pub struct Span {
     start: Loc,
     end: Loc,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum TokenKind {
-    LeftParen,
-    RightParen,
-    Plus,
-    Minus,
-    Slash,
-    Asterisk,
-
-    Number,
-}
-
-impl fmt::Display for TokenKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Token<'source> {
-    kind: TokenKind,
-    lexeme: &'source str,
-    span: Span,
 }
 
 #[derive(Debug)]
