@@ -59,19 +59,6 @@ enum TokenKind {
     Number,
 }
 
-impl TokenKind {
-    fn get_precedence(&self) -> Precedence {
-        use TokenKind::*;
-
-        match self {
-            Plus | Minus => Precedence::Sum,
-            Slash | Asterisk => Precedence::Product,
-            LeftParen | Number => Precedence::Prefix,
-            _ => Precedence::Lowest,
-        }
-    }
-}
-
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -83,6 +70,27 @@ struct Token<'source> {
     kind: TokenKind,
     lexeme: &'source str,
     span: Span,
+}
+
+impl<'source> Token<'source> {
+    fn prefix_parselet(&self) -> Option<Box<dyn PrefixParselet<'source>>> {
+        use TokenKind::*;
+
+        match self.kind {
+            Number => Some(Box::new(NumberParselet)),
+            LeftParen => Some(Box::new(GroupParselet)),
+            _ => None,
+        }
+    }
+
+    fn infix_parselet(&self) -> Option<Box<dyn InfixParselet<'source>>> {
+        match self.kind {
+            TokenKind::Plus | TokenKind::Minus | TokenKind::Slash | TokenKind::Asterisk => {
+                Some(Box::new(BinOpParselet { kind: self.kind }))
+            }
+            _ => None,
+        }
+    }
 }
 
 struct Lexer<'source> {
@@ -262,7 +270,81 @@ enum Precedence {
     Lowest,
     Sum,
     Product,
-    Prefix,
+}
+
+trait PrefixParselet<'source> {
+    fn parse(&self, parser: &mut Parser<'source>, token: Token<'source>) -> Result<Expr<'source>>;
+}
+
+trait InfixParselet<'source> {
+    fn precedence(&self) -> Precedence;
+
+    fn parse(
+        &self,
+        parser: &mut Parser<'source>,
+        left: Expr<'source>,
+        token: Token<'source>,
+    ) -> Result<Expr<'source>>;
+}
+
+struct NumberParselet;
+
+impl<'source> PrefixParselet<'source> for NumberParselet {
+    fn parse(&self, _parser: &mut Parser<'source>, token: Token<'source>) -> Result<Expr<'source>> {
+        Ok(Expr::Number(token))
+    }
+}
+
+struct GroupParselet;
+
+impl<'source> PrefixParselet<'source> for GroupParselet {
+    fn parse(&self, parser: &mut Parser<'source>, _token: Token<'source>) -> Result<Expr<'source>> {
+        let expr = Box::new(parser.parse()?);
+        if !matches!(
+            parser.tokens.next(),
+            Some(Ok(Token {
+                kind: TokenKind::RightParen,
+                ..
+            }))
+        ) {
+            return Err(Error::UnclosedGroup {
+                location: expr.span().end,
+            });
+        }
+
+        Ok(Expr::Group(expr))
+    }
+}
+
+struct BinOpParselet {
+    kind: TokenKind,
+}
+
+impl<'source> InfixParselet<'source> for BinOpParselet {
+    fn precedence(&self) -> Precedence {
+        use TokenKind::*;
+
+        match self.kind {
+            Plus | Minus => Precedence::Sum,
+            Slash | Asterisk => Precedence::Product,
+            _ => unimplemented!(),
+        }
+    }
+
+    fn parse(
+        &self,
+        parser: &mut Parser<'source>,
+        left: Expr<'source>,
+        token: Token<'source>,
+    ) -> Result<Expr<'source>> {
+        let right = Box::new(parser.parse_with_precedence(self.precedence())?);
+
+        Ok(Expr::BinOp {
+            left: Box::new(left),
+            op: token,
+            right,
+        })
+    }
 }
 
 struct Parser<'source> {
@@ -276,65 +358,13 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse_number(&mut self, token: Token<'source>) -> Result<Expr<'source>> {
-        Ok(Expr::Number(token))
-    }
-
-    fn parse_group(&mut self, token: Token<'source>) -> Result<Expr<'source>> {
-        let expr = Box::new(self.parse_with_precedence(token.kind.get_precedence())?);
-        if !matches!(
-            self.tokens.next(),
-            Some(Ok(Token {
-                kind: TokenKind::RightParen,
-                ..
-            }))
-        ) {
-            return Err(Error::UnclosedGroup {
-                location: expr.span().end,
-            });
-        }
-
-        Ok(Expr::Group(expr))
-    }
-
-    fn get_prefix_parselet(
-        &self,
-        kind: TokenKind,
-    ) -> Option<fn(&mut Self, token: Token<'source>) -> Result<Expr<'source>>> {
-        match kind {
-            TokenKind::Number => Some(Self::parse_number),
-            TokenKind::LeftParen => Some(Self::parse_group),
-            _ => None,
-        }
-    }
-
-    fn parse_binop(&mut self, left: Expr<'source>, token: Token<'source>) -> Result<Expr<'source>> {
-        let right = Box::new(self.parse_with_precedence(token.kind.get_precedence())?);
-
-        Ok(Expr::BinOp {
-            left: Box::new(left),
-            op: token,
-            right,
-        })
-    }
-
-    fn get_infix_parselet(
-        &self,
-        kind: TokenKind,
-    ) -> Option<fn(&mut Self, left: Expr<'source>, token: Token<'source>) -> Result<Expr<'source>>>
-    {
-        match kind {
-            TokenKind::Plus => Some(Self::parse_binop),
-            TokenKind::Minus => Some(Self::parse_binop),
-            TokenKind::Slash => Some(Self::parse_binop),
-            TokenKind::Asterisk => Some(Self::parse_binop),
-            _ => None,
-        }
-    }
-
     fn get_next_precedence(&mut self) -> Precedence {
         if let Some(Ok(token)) = self.tokens.peek() {
-            token.kind.get_precedence()
+            if let Some(parselet) = token.infix_parselet() {
+                parselet.precedence()
+            } else {
+                Precedence::Lowest
+            }
         } else {
             Precedence::Lowest
         }
@@ -343,24 +373,22 @@ impl<'source> Parser<'source> {
     fn parse_with_precedence(&mut self, precedence: Precedence) -> Result<Expr<'source>> {
         let token = self.tokens.next().ok_or(Error::UnexpectedEof)??;
 
-        let parse_prefix =
-            self.get_prefix_parselet(token.kind)
-                .ok_or_else(|| Error::UnexpectedToken {
-                    kind: token.kind,
-                    location: token.span.start,
-                })?;
+        let prefix = token.prefix_parselet().ok_or(Error::UnexpectedToken {
+            kind: token.kind,
+            location: token.span.start,
+        })?;
 
-        let mut left = parse_prefix(self, token)?;
+        let mut left = prefix.parse(self, token)?;
 
         while precedence < self.get_next_precedence() {
             let token = self.tokens.next().ok_or(Error::UnexpectedEof)??;
 
-            let parse_infix = match self.get_infix_parselet(token.kind) {
+            let infix = match token.infix_parselet() {
                 Some(parselet) => parselet,
                 None => return Ok(left),
             };
 
-            left = parse_infix(self, left, token)?;
+            left = infix.parse(self, left, token)?;
         }
 
         Ok(left)
