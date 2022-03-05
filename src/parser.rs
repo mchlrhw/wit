@@ -1,6 +1,9 @@
 mod parselet;
 
-use crate::{Error, Expr, Lexer, Result, Tokens};
+use crate::{
+    lexer::{Lexer, Tokens},
+    Error, Expr, Result,
+};
 use itertools::{peek_nth, PeekNth};
 use parselet::{infix_parselet, prefix_parselet};
 
