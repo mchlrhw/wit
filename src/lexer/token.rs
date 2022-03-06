@@ -1,4 +1,4 @@
-use crate::{Span};
+use crate::Span;
 use std::fmt;
 
 #[derive(Copy, Clone, Debug)]

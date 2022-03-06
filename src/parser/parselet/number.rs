@@ -1,5 +1,9 @@
 use super::PrefixParselet;
-use crate::{Result, parser::Parser, Expr, Token};
+use crate::{
+    lexer::Token,
+    parser::{Expr, Parser},
+    Result,
+};
 
 pub struct Parselet;
 

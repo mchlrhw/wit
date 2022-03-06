@@ -2,8 +2,11 @@ mod bin_op;
 mod group;
 mod number;
 
-use super::{Parser, Precedence};
-use crate::{Expr, Result, Token, TokenKind};
+use super::{Expr, Parser, Precedence};
+use crate::{
+    lexer::{Token, TokenKind},
+    Result,
+};
 
 pub trait PrefixParselet<'source> {
     fn parse(&self, parser: &mut Parser<'source>, token: Token<'source>) -> Result<Expr<'source>>;

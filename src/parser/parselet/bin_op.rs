@@ -1,7 +1,8 @@
 use super::InfixParselet;
 use crate::{
-    parser::{Parser, Precedence},
-    Expr, Result, Token, TokenKind,
+    lexer::{Token, TokenKind},
+    parser::{Expr, Parser, Precedence},
+    Result,
 };
 
 pub struct Parselet {

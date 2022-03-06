@@ -1,11 +1,14 @@
+mod ast;
 mod parselet;
 
 use crate::{
     lexer::{Lexer, Tokens},
-    Error, Expr, Result,
+    Error, Result,
 };
 use itertools::{peek_nth, PeekNth};
 use parselet::{infix_parselet, prefix_parselet};
+
+pub use ast::Expr;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum Precedence {
