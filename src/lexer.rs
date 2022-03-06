@@ -1,7 +1,9 @@
+pub mod span;
 pub mod token;
 
-use crate::{Error, Result, Span};
+use crate::{Error, Result};
 use itertools::{peek_nth, PeekNth};
+use span::Span;
 use std::str::Chars;
 use token::{Token, TokenKind};
 
