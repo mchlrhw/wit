@@ -1,11 +1,23 @@
+pub mod codegen;
 mod lexer;
 mod parser;
 
+use inkwell::execution_engine::FunctionLookupError;
 use lexer::{Loc, Span, TokenKind};
+
 pub use parser::Parser;
 
-#[derive(Clone, Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("execution engine error: {message}")]
+    ExecutionEngine { message: String },
+
+    #[error(transparent)]
+    FunctionLookup(#[from] FunctionLookupError),
+
+    #[error("llvm error: {message}")]
+    Llvm { message: String },
+
     #[error("unclosed group at {location}")]
     UnclosedGroup { location: Loc },
 

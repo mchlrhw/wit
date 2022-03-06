@@ -1,9 +1,11 @@
-use wit::Parser;
+use wit::{codegen::jit_compile, Parser};
 
 fn main() -> anyhow::Result<()> {
-    let source = "1.2 - 34 * 5 - 6.7 / 89";
+    let source = "3 - 2 - 1";
     let expr = Parser::new(source).parse()?;
-    println!("{expr:#?}");
+    let val = jit_compile(expr)?;
+
+    println!("{val}");
 
     Ok(())
 }
