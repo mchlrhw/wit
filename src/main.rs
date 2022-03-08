@@ -21,7 +21,9 @@ fn run_repl() -> anyhow::Result<()> {
             break;
         }
 
-        run(&line)?;
+        if let Err(error) = run(&line) {
+            println!("Error: {error}");
+        }
     }
 
     Ok(())
