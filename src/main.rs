@@ -1,11 +1,10 @@
 use std::{env, io::Write, process};
-use wit::{codegen::jit_compile, Parser};
+use wit::Parser;
 
 fn run(source: &str) -> anyhow::Result<()> {
     let expr = Parser::new(source).parse()?;
-    let val = jit_compile(expr)?;
 
-    println!("{val}");
+    println!("{expr:#?}");
 
     Ok(())
 }
