@@ -8,20 +8,17 @@ use crate::{
 pub struct Parselet;
 
 impl<'source> PrefixParselet<'source> for Parselet {
-    fn parse(&self, parser: &mut Parser<'source>, _token: Token<'source>) -> Result<Expr<'source>> {
+    fn parse(&self, parser: &mut Parser<'source>, token: Token<'source>) -> Result<Expr<'source>> {
+        let open = token;
         let expr = Box::new(parser.parse()?);
-        if !matches!(
-            parser.tokens.next(),
-            Some(Ok(Token {
-                kind: TokenKind::RightParen,
-                ..
-            }))
-        ) {
+        let close = parser.tokens.next().ok_or(Error::UnexpectedEof)??;
+
+        if !matches!(close.kind, TokenKind::RightParen) {
             return Err(Error::UnclosedGroup {
                 location: expr.span().end,
             });
         }
 
-        Ok(Expr::Group(expr))
+        Ok(Expr::Group { open, expr, close })
     }
 }

@@ -8,7 +8,11 @@ pub enum Expr<'source> {
         op: Token<'source>,
         right: Box<Expr<'source>>,
     },
-    Group(Box<Expr<'source>>),
+    Group {
+        open: Token<'source>,
+        expr: Box<Expr<'source>>,
+        close: Token<'source>,
+    },
 }
 
 impl<'source> Expr<'source> {
@@ -23,7 +27,12 @@ impl<'source> Expr<'source> {
 
                 Span { start, end }
             }
-            Group(expr) => expr.span(),
+            Group { open, close, .. } => {
+                let start = open.span.start;
+                let end = close.span.end;
+
+                Span { start, end }
+            }
         }
     }
 }
