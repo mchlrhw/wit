@@ -2,7 +2,7 @@ use super::InfixParselet;
 use crate::{
     lexer::{Token, TokenKind},
     parser::{Expr, Parser, Precedence},
-    Result,
+    Error, Result,
 };
 
 pub struct Parselet {
@@ -32,7 +32,8 @@ impl<'source> InfixParselet<'source> for Parselet {
         left: Expr<'source>,
         token: Token<'source>,
     ) -> Result<Expr<'source>> {
-        let right = Box::new(parser.parse_with_precedence(self.precedence())?);
+        let next = parser.tokens.next().ok_or(Error::UnexpectedEof)??;
+        let right = Box::new(parser.parse_with_precedence(self.precedence(), next)?);
 
         Ok(Expr::BinOp {
             left: Box::new(left),

@@ -1,4 +1,5 @@
 mod bin_op;
+mod block;
 mod group;
 mod number;
 
@@ -29,8 +30,9 @@ pub fn prefix_parselet<'source>(
     use TokenKind::*;
 
     match token.kind {
-        Number => Some(Box::new(number::Parselet)),
+        LeftBrace => Some(Box::new(block::Parselet)),
         LeftParen => Some(Box::new(group::Parselet)),
+        Number => Some(Box::new(number::Parselet)),
         _ => None,
     }
 }

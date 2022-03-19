@@ -1,10 +1,14 @@
 use crate::Span;
 use std::fmt;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TokenKind {
     LeftParen,
     RightParen,
+    LeftBrace,
+    RightBrace,
+    Semicolon,
+
     Plus,
     Minus,
     Slash,

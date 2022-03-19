@@ -2,9 +2,9 @@ use std::{env, io::Write, process};
 use wit::Parser;
 
 fn run(source: &str) -> anyhow::Result<()> {
-    let expr = Parser::new(source).parse()?;
+    let (block, _) = Parser::new(source).parse_block_inner(None)?;
 
-    println!("{expr:#?}");
+    println!("{block:#?}");
 
     Ok(())
 }

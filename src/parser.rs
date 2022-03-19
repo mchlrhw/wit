@@ -2,13 +2,13 @@ mod ast;
 mod parselet;
 
 use crate::{
-    lexer::{Lexer, Tokens},
+    lexer::{Lexer, Token, TokenKind, Tokens},
     Error, Result,
 };
 use itertools::{peek_nth, PeekNth};
 use parselet::{infix_parselet, prefix_parselet};
 
-pub use ast::Expr;
+pub use ast::{Block, Expr, Stmt};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum Precedence {
@@ -40,9 +40,11 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse_with_precedence(&mut self, precedence: Precedence) -> Result<Expr<'source>> {
-        let token = self.tokens.next().ok_or(Error::UnexpectedEof)??;
-
+    fn parse_with_precedence(
+        &mut self,
+        precedence: Precedence,
+        token: Token<'source>,
+    ) -> Result<Expr<'source>> {
         let prefix = prefix_parselet(&token).ok_or(Error::UnexpectedToken {
             kind: token.kind,
             location: token.span.start,
@@ -64,7 +66,90 @@ impl<'source> Parser<'source> {
         Ok(left)
     }
 
-    pub fn parse(&mut self) -> Result<Expr<'source>> {
-        self.parse_with_precedence(Precedence::Lowest)
+    fn parse_expr(&mut self, token: Token<'source>) -> Result<Expr<'source>> {
+        self.parse_with_precedence(Precedence::Lowest, token)
+    }
+
+    fn parse_stmt(&mut self, token: Token<'source>) -> Result<Stmt<'source>> {
+        if matches!(
+            token,
+            Token {
+                kind: TokenKind::Semicolon,
+                ..
+            }
+        ) {
+            return Ok(Stmt::Empty { semicolon: token });
+        }
+
+        let expr = self.parse_expr(token)?;
+
+        let semicolon = if let Some(Ok(Token {
+            kind: TokenKind::Semicolon,
+            ..
+        })) = self.tokens.peek()
+        {
+            Some(
+                self.tokens
+                    .next()
+                    .expect("we already checked next is some")?,
+            )
+        } else {
+            None
+        };
+
+        Ok(Stmt::Expr { expr, semicolon })
+    }
+
+    pub fn parse_block_inner(
+        &mut self,
+        close_kind: Option<TokenKind>,
+    ) -> Result<(Block<'source>, Option<Token<'source>>)> {
+        let mut inner = Block::default();
+
+        let close = loop {
+            let token = if let Some(close_kind) = close_kind {
+                let token = self.tokens.next().ok_or(Error::UnexpectedEof)??;
+                if token.kind == close_kind {
+                    break token;
+                }
+
+                token
+            } else {
+                let token = self.tokens.next();
+                if token.is_none() {
+                    return Ok((inner, None));
+                }
+
+                token.expect("we already checked next is some")?
+            };
+
+            let stmt = self.parse_stmt(token)?;
+            match stmt {
+                Stmt::Empty { .. } => inner.stmts.push(stmt),
+                Stmt::Expr { expr, semicolon } => {
+                    if let Some(semicolon) = semicolon {
+                        inner.stmts.push(Stmt::Expr {
+                            expr,
+                            semicolon: Some(semicolon),
+                        })
+                    } else {
+                        if let Some(Ok(token)) = self.tokens.peek() {
+                            if Some(token.kind) != close_kind {
+                                let unexpected =
+                                    self.tokens.next().ok_or(Error::UnexpectedEof)??;
+                                return Err(Error::UnexpectedToken {
+                                    kind: unexpected.kind,
+                                    location: unexpected.span.start,
+                                });
+                            }
+                        }
+
+                        inner.expr = Some(Box::new(expr));
+                    }
+                }
+            }
+        };
+
+        Ok((inner, Some(close)))
     }
 }

@@ -123,10 +123,15 @@ impl<'source> Iterator for Lexer<'source> {
             let res = match c {
                 '(' => self.single_char(c, TokenKind::LeftParen),
                 ')' => self.single_char(c, TokenKind::RightParen),
+                '{' => self.single_char(c, TokenKind::LeftBrace),
+                '}' => self.single_char(c, TokenKind::RightBrace),
+                ';' => self.single_char(c, TokenKind::Semicolon),
+
                 '+' => self.single_char(c, TokenKind::Plus),
                 '-' => self.single_char(c, TokenKind::Minus),
                 '*' => self.single_char(c, TokenKind::Asterisk),
                 '/' => self.single_char(c, TokenKind::Slash),
+
                 c if c.is_digit(10) => self.number(c),
                 c if c.is_whitespace() => {
                     self.move_span(c);

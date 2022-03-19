@@ -10,12 +10,23 @@ pub struct Parselet;
 impl<'source> PrefixParselet<'source> for Parselet {
     fn parse(&self, parser: &mut Parser<'source>, token: Token<'source>) -> Result<Expr<'source>> {
         let open = token;
-        let expr = Box::new(parser.parse()?);
-        let close = parser.tokens.next().ok_or(Error::UnexpectedEof)??;
+        let next = parser.tokens.next().ok_or(Error::UnexpectedEof)??;
+        let (expr, close) = if let Token {
+            kind: TokenKind::RightParen,
+            ..
+        } = next
+        {
+            (None, next)
+        } else {
+            let expr = Box::new(parser.parse_expr(next)?);
+            let close = parser.tokens.next().ok_or(Error::UnexpectedEof)??;
+
+            (Some(expr), close)
+        };
 
         if !matches!(close.kind, TokenKind::RightParen) {
             return Err(Error::UnclosedGroup {
-                location: expr.span().end,
+                location: close.span.start,
             });
         }
 
